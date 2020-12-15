@@ -1,0 +1,472 @@
+---
+title: "SJER, SOAP, & TEAK CO2 flux and CHM"
+author: "McKenna Montminy"
+date: "12/10/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+First, load the libraries that we need for this study. 
+```{r message=FALSE, warning=FALSE, results=FALSE}
+
+# Load libraries
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(devtools) 
+library(downloader)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(tidyverse)
+library(neonUtilities)
+library(geoNEON)
+library(ggplot2)
+library(BiocManager)
+library(rhdf5)
+
+```
+
+Input eddy covariance data for ALL SITES [https://www.neonscience.org/resources/learning-hub/tutorials/eddy-data-intro]
+```{r, setup/download data from NEON}
+
+# Setup
+options(stringsAsFactors=F)
+
+# Download data
+#zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            #  site="SJER", 
+            #  startdate="2019-10", enddate="2020-10")
+#zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            #  site="SOAP", 
+            #  startdate="2019-10", enddate="2020-10")
+#zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            #  site="TEAK", 
+            #  startdate="2019-10", enddate="2020-10")
+
+flux <- stackEddy(filepath="data/filesToStack00200/",
+                 level="dp04") 
+#extracting level 4 gives us flux data
+names(flux)
+
+```
+
+
+## SJER
+```{r}
+
+SJER_term <- unlist(strsplit(names(flux$SJER), split=".", fixed=T))
+flux$objDesc[which(flux$objDesc$Object %in% SJER_term),]
+head(SJER_term)
+flux$variables
+
+```
+
+```{r, CO2 flux over (time period? months?)}
+
+## Eddy [contd.]: Entering time data
+SJERtimeB <- as.POSIXct(flux$SJER$timeBgn, 
+                    format="%Y-%m-%dT%H:%M:%S", 
+                    tz="GMT")
+flux$SJER <- cbind(SJERtimeB, flux$SJER)
+
+# Plotted over year: Oct 2019 -- Oct 2020
+plot(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB, 
+     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
+            as.POSIXct("2020-09-30", tz="GMT")),
+    ylim=c(-2000,2000), xaxt="n") +
+  axis.POSIXct(1, x=SJERtimeB, format="%Y-%m-%d")
+
+```
+
+
+```{r, CO2 flux 1 day}
+
+# Plotted over 1 day
+plot(flux$SJER$data.fluxCo2.nsae.flux ~SJERtimeB, 
+     pch=20, xlab="Date (01/01/20 - 01/03/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2020-01-01", tz="GMT"),
+            as.POSIXct("2020-01-03", tz="GMT")),
+    ylim=c(-20,20), xaxt="n") +
+  abline(lm(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB), col = "blue") +
+  axis.POSIXct(1, x=SJERtimeB, format="%Y-%m-%d %H:%M:%S")
+
+```
+
+### Overlay shapefile of eddy covariance tower footprint on NEON CHM data.
+Read shapefile with the boundaries of a eddy covariance tower footprint
+```{r}
+
+NEON_ECtower_fp <-sf::st_read("data/90percentfootprint/90percent_footprint.shp")
+
+```
+
+```{r}
+
+# Filter to the SJER tower footprint
+ECtower_SJER <- dplyr::filter(NEON_ECtower_fp, SiteID == "SJER")
+
+# Check current CRS of the footprint shapefile
+st_crs(ECtower_SJER)
+
+```
+
+```{r}
+
+# Reproject the crs from longlat to UTM 11N
+# Define UTM 11N WGS84 proj4string
+utm11nCRS <- "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+ECtower_SJER_utm <- st_transform(ECtower_SJER, utm11nCRS)
+
+# Find limits of tower footprint to only download AOP that is co-located with the footprint
+SJER_bbox <- st_bbox(ECtower_SJER_utm)
+SJER_bbox
+
+# Round easting/northing to nearest 1km for matching AOP tiles that overlap footprint
+SJER_easting <- c(256000, 256000, 256000, 257000, 257000, 257000, 258000, 258000, 258000)
+SJER_northing <- c(4109000, 4110000, 4111000, 4109000, 4110000, 4111000, 4109000, 4110000, 4111000)
+
+```
+
+Request ecosystem structure data from NEON API:
+```{r}
+
+# Download the canopy height tiles (1km grid) that correspond to tower footprint
+SJERtmp <- byTileAOP(dpID = "DP3.30015.001", site = "SJER", year = c("2019"),
+                 easting = SJER_easting, northing = SJER_northing)
+
+# Load the canopy heights as raster files, and merge into 1 raster
+SJER_chm_1 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_256000_4109000_CHM.tif")
+SJER_chm_2 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_256000_4110000_CHM.tif")
+SJER_chm_3 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_256000_4111000_CHM.tif")
+SJER_chm_4 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_257000_4109000_CHM.tif")
+SJER_chm_5 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_257000_4110000_CHM.tif")
+SJER_chm_6 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_257000_4111000_CHM.tif")
+SJER_chm_7 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_258000_4110000_CHM.tif")
+SJER_chm_8 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_258000_4111000_CHM.tif")
+SJER_chm_9 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SJER_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SJER_DP3_258000_4109000_CHM.tif")
+
+# Merge individual 1km tiles
+SJER_chm <- merge(SJER_chm_1, SJER_chm_2, SJER_chm_3, SJER_chm_4, 
+                  SJER_chm_5, SJER_chm_6, SJER_chm_7, SJER_chm_8, SJER_chm_9)
+
+# Check CHM crs
+crs(SJER_chm)
+
+```
+### Plot tower footprint and CHM.
+```{r}
+
+# Make raster a data frame
+SJER_chm_df <- as.data.frame(SJER_chm, xy=TRUE)
+
+# Plot the tower footprint shapefile onto the CHM
+ggplot() +
+  geom_raster(data = SJER_chm_df,
+              aes(x = x, y = y, fill = layer)) + 
+  geom_sf(data = ECtower_SJER_utm, color = "white", fill = NA) + 
+  scale_fill_gradientn(name = "Canopy Height", colors = terrain.colors(10)) + 
+  coord_sf(datum=utm11nCRS)
+
+```
+
+```{r, SJER summary: CHM mean & sd, and CO2 max/min}
+
+# Extract CHM mean data values from shapefile footprint
+SJER_fpCHM_mean <- raster::extract(x = SJER_chm, y = ECtower_SJER_utm, df = TRUE, fun=mean)
+SJER_fpCHM_mean
+## mean = 2.366575
+
+# Extract CHM mstandard deviation data values from shapefile footprint
+SJER_fpCHM_sd <- raster::extract(x = SJER_chm, y = ECtower_SJER_utm, df = TRUE, fun=sd)
+SJER_fpCHM_sd
+## sd = 4.393040
+
+## Use ID #1; in ECtower_SJER under the notes column it states that ID #1 is the major site and #2 is secondary. So we'll use #1 to simplify. 
+
+``` 
+
+```{r, summary eddy covariance}
+
+max(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# 3306963
+min(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# -36934.04
+mean(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# 389.3742
+
+```
+
+
+
+## SOAP
+
+Input eddy covariance data [https://www.neonscience.org/resources/learning-hub/tutorials/eddy-data-intro]
+```{r}
+
+SOAP_term <- unlist(strsplit(names(flux$SOAP), split=".", fixed=T))
+flux$objDesc[which(flux$objDesc$Object %in% SOAP_term),]
+head(SOAP_term)
+flux$variables
+
+```
+
+```{r, CO2 flux over (year)}
+
+SOAPtimeB <- as.POSIXct(flux$SOAP$timeBgn, 
+                    format="%Y-%m-%dT%H:%M:%S", 
+                    tz="GMT")
+flux$SOAP <- cbind(SOAPtimeB, flux$SOAP)
+
+# Plotted over year: Oct 2019 -- Oct 2020
+plot(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB, 
+     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
+            as.POSIXct("2020-09-30", tz="GMT")),
+    ylim=c(-2000,2000), xaxt="n")+
+  axis.POSIXct(1, x=SOAPtimeB, format="%Y-%m-%d")
+
+```
+
+```{r, CO2 flux 1 day}
+
+# Plotted over 1 day ***Changed to Jan 2020 because little data in Dec. 2019 & no data in Nov. 2019
+plot(flux$SOAP$data.fluxCo2.nsae.flux ~SOAPtimeB, 
+     pch=20, xlab="Date", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2020-01-01", tz="GMT"),
+            as.POSIXct("2020-01-03", tz="GMT")),
+    ylim=c(-20,20), xaxt="n") +
+  abline(lm(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB), col = "blue") +
+  axis.POSIXct(1, x=SOAPtimeB, format="%Y-%m-%d %H:%M:%S")
+
+```
+
+### Overlay shapefile of eddy covariance tower footprint on NEON CHM data.
+Read shapefile with the boundaries of a eddy covariance tower footprint
+```{r, SOAP tower footprint}
+
+# Filter to the SOAP tower footprint
+ECtower_SOAP <- dplyr::filter(NEON_ECtower_fp, SiteID == "SOAP")
+
+# Check current CRS of the footprint shapefile
+st_crs(ECtower_SOAP) 
+
+```
+
+```{r}
+# Reproject the crs from longlat to UTM 11N
+# Define UTM 11N WGS84 proj4string
+utm11nCRS <- "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+ECtower_SOAP_utm <- st_transform(ECtower_SOAP, utm11nCRS)
+
+# Find limits of tower footprint to only download AOP that is co-located with the footprint
+SOAP_bbox <- st_bbox(ECtower_SOAP_utm)
+SOAP_bbox
+
+# Round easting/northing to nearest 1km for matching AOP tiles that overlap footprint
+SOAP_easting <- c(297000, 297000, 298000, 298000, 299000, 299000)
+SOAP_northing <- c(4100000, 4101000, 4100000, 4101000, 4100000, 4101000)
+
+```
+
+Request ecosystem structure data from NEON API:
+```{r}
+# Download the canopy height tiles (1km grid) that correspond to tower footprint
+# This will download to a folder called DP3.30015.001 where your project directory is
+SOAPtmp <- byTileAOP(dpID = "DP3.30015.001", site = "SOAP", year = c("2019", "2020"),
+                 easting = SOAP_easting, northing = SOAP_northing)
+
+# Load the canopy heights as raster files, and merge into 1 raster
+SOAP_chm_1 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_297000_4100000_CHM.tif")
+SOAP_chm_2 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_297000_4101000_CHM.tif")
+SOAP_chm_3 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_298000_4100000_CHM.tif")
+SOAP_chm_4 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_298000_4101000_CHM.tif")
+SOAP_chm_5 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_299000_4100000_CHM.tif")
+SOAP_chm_6 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_299000_4101000_CHM.tif")
+
+SOAP_chm <- merge(SOAP_chm_1, SOAP_chm_2, SOAP_chm_3, SOAP_chm_4, SOAP_chm_5, SOAP_chm_6)
+
+# Check CHM crs
+crs(SOAP_chm)
+```
+
+### Plot tower footprint and CHM.
+```{r}
+# Make raster a data frame
+SOAP_chm_df <- as.data.frame(SOAP_chm, xy=TRUE)
+
+# Plot the tower footprint shapefile onto the CHM
+ggplot() +
+  geom_raster(data = SOAP_chm_df,
+              aes(x = x, y = y, fill = layer)) + 
+  geom_sf(data = ECtower_SOAP_utm, color = "white", fill = NA) + 
+  scale_fill_gradientn(name = "Canopy Height", colors = terrain.colors(10)) + 
+  coord_sf(datum=utm11nCRS)
+
+```
+
+```{r, SOAP CHM summary: mean & sd, echo = false}
+
+# Extract CHM data values from the footprint shapefile
+SOAP_fpCHM_mean <- raster::extract(x = SOAP_chm, y = ECtower_SOAP_utm, df = TRUE, fun=mean)
+SOAP_fpCHM_mean
+## mean = 5.561121
+
+SOAP_fpCHM_sd <- raster::extract(x = SOAP_chm, y = ECtower_SOAP_utm, df = TRUE, fun=sd)
+SOAP_fpCHM_sd
+## sd = 8.232840
+
+```
+
+```{r, summary eddy covariance}
+
+max(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# 256.364
+min(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# -549.747
+mean(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# -0.6100276
+
+```
+
+
+
+
+## TEAK
+
+### Input eddy covariance data [https://www.neonscience.org/resources/learning-hub/tutorials/eddy-data-intro]
+```{r}
+
+TEAK_term <- unlist(strsplit(names(flux$TEAK), split=".", fixed=T))
+flux$objDesc[which(flux$objDesc$Object %in% TEAK_term),]
+head(TEAK_term)
+flux$variables
+
+```
+
+```{r, CO2 flux over (time period? months?)}
+
+TEAKtimeB <- as.POSIXct(flux$TEAK$timeBgn, 
+                    format="%Y-%m-%dT%H:%M:%S", 
+                    tz="GMT")
+flux$TEAK <- cbind(TEAKtimeB, flux$TEAK)
+
+# Plotted over year: Oct 2019 -- Oct 2020
+plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
+     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
+            as.POSIXct("2020-09-30", tz="GMT")),
+    ylim=c(-2000,2000), xaxt="n") +
+  axis.POSIXct(1, x=TEAKtimeB, format="%Y-%m-%d")
+
+```
+
+```{r, CO2 flux 1 day}
+# Plotted over 1 day
+## Changed to 12-02 to 12-04 because no data 12-01
+plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
+     pch=20, xlab="Date", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2019-12-02", tz="GMT"),
+            as.POSIXct("2019-12-04", tz="GMT")),
+    ylim=c(-20,20), xaxt="n") +
+  abline(lm(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB), col = "blue") +
+  axis.POSIXct(1, x=TEAKtimeB, format="%Y-%m-%d %H:%M:%S")
+```
+
+### Overlay shapefile of eddy covariance tower footprint on NEON CHM data.
+
+```{r}
+
+# Filter to the SJER tower footprint
+ECtower_TEAK <- dplyr::filter(NEON_ECtower_fp, SiteID == "TEAK")
+
+# Check current CRS of the footprint shapefile
+st_crs(ECtower_TEAK) 
+
+```
+
+```{r}
+
+# Reproject the crs from longlat to UTM 11N
+# Define UTM 11N WGS84 proj4string
+utm11nCRS <- "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+ECtower_TEAK_utm <- st_transform(ECtower_TEAK, utm11nCRS)
+
+# Find limits of tower footprint to only download AOP that is co-located with the footprint
+TEAK_bbox <- st_bbox(ECtower_TEAK_utm)
+TEAK_bbox
+
+# Actual footprint tiles
+TEAK_easting <- c(320000, 320000, 320000, 321000, 321000, 321000, 322000, 322000, 322000)
+TEAK_northing <- c(4096000, 4097000, 4098000, 4096000, 4097000, 4098000, 4096000, 4097000, 4098000)
+
+```
+
+Request ecosystem structure data from NEON API:
+```{r}
+# Download the canopy height tiles (1km grid) that correspond to tower footprint
+# This will download to a folder called DP3.30015.001 where your project directory is
+TEAKtmp <- byTileAOP(dpID = "DP3.30015.001", site = "TEAK", year = c("2019", "2020"),
+                 easting = TEAK_easting, northing = TEAK_northing)
+
+# Load the canopy heights as raster files, and merge into 1 raster
+TEAK_chm_1 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_320000_4096000_CHM.tif")
+TEAK_chm_2 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_320000_4097000_CHM.tif")
+TEAK_chm_3 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_320000_4098000_CHM.tif")
+TEAK_chm_4 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_321000_4096000_CHM.tif")
+TEAK_chm_5 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_321000_4097000_CHM.tif")
+TEAK_chm_6 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_321000_4098000_CHM.tif")
+TEAK_chm_7 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_322000_4096000_CHM.tif")
+TEAK_chm_8 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_322000_4097000_CHM.tif")
+TEAK_chm_9 <- raster("DP3.30015.001/2019/FullSite/D17/2019_TEAK_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_TEAK_DP3_322000_4098000_CHM.tif")
+
+TEAK_chm <- merge(TEAK_chm_1, TEAK_chm_2, TEAK_chm_3, TEAK_chm_4, 
+                  TEAK_chm_5, TEAK_chm_6, TEAK_chm_7, TEAK_chm_8, TEAK_chm_9)
+
+# Check CHM crs
+crs(TEAK_chm)
+
+```
+
+### Plot tower footprint and CHM.
+```{r}
+
+# Make raster a data frame
+TEAK_chm_df <- as.data.frame(TEAK_chm, xy=TRUE)
+
+# Plot the tower footprint shapefile onto the CHM
+ggplot() +
+  geom_raster(data = TEAK_chm_df,
+              aes(x = x, y = y, fill = layer)) + 
+  geom_sf(data = ECtower_TEAK_utm, color = "white", fill = NA) + 
+  scale_fill_gradientn(name = "Canopy Height", colors = terrain.colors(10)) + 
+  coord_sf(datum=utm11nCRS)
+
+```
+
+```{r, TEAK CHM summary: mean & sd}
+
+# Get CHM data values (mean & sd) inside EC footprint shapefile
+TEAK_fpCHM_mean <- raster::extract(x = TEAK_chm, y = ECtower_TEAK_utm, df=TRUE, fun=mean)
+TEAK_fpCHM_mean
+## mean = 10.111631
+
+TEAK_fpCHM_sd <- raster::extract(x = TEAK_chm, y = ECtower_TEAK_utm, df=TRUE, fun=sd)
+TEAK_fpCHM_sd
+## sd = 10.97886
+
+```  
+
+```{r, summary eddy covariance}
+
+max(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# 1412.851
+min(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# -1028.751
+mean(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
+# -0.5793503
+
+```
