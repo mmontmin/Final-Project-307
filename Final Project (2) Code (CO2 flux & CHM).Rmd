@@ -26,6 +26,7 @@ library(geoNEON)
 library(ggplot2)
 library(BiocManager)
 library(rhdf5)
+library(data.table)
 
 ```
 
@@ -36,17 +37,17 @@ Input eddy covariance data for ALL SITES [https://www.neonscience.org/resources/
 options(stringsAsFactors=F)
 
 # Download data
-#zipsByProduct(dpID="DP4.00200.001", package="basic", 
-            #  site="SJER", 
-            #  startdate="2019-10", enddate="2020-10")
-#zipsByProduct(dpID="DP4.00200.001", package="basic", 
-            #  site="SOAP", 
-            #  startdate="2019-10", enddate="2020-10")
-#zipsByProduct(dpID="DP4.00200.001", package="basic", 
-            #  site="TEAK", 
-            #  startdate="2019-10", enddate="2020-10")
+zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            site="SJER", 
+            startdate="2019-10", enddate="2020-10")
+zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            site="SOAP", 
+            startdate="2019-10", enddate="2020-10")
+zipsByProduct(dpID="DP4.00200.001", package="basic", 
+            site="TEAK", 
+            startdate="2019-10", enddate="2020-10")
 
-flux <- stackEddy(filepath="data/filesToStack00200/",
+flux <- stackEddy(filepath="filesToStack00200",
                  level="dp04") 
 #extracting level 4 gives us flux data
 names(flux)
@@ -77,7 +78,7 @@ plot(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB,
      pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
-    ylim=c(-2000,2000), xaxt="n") +
+    ylim=c(-20,20), xaxt="n") +
   axis.POSIXct(1, x=SJERtimeB, format="%Y-%m-%d")
 
 ```
@@ -116,22 +117,22 @@ st_crs(ECtower_SJER)
 
 ```{r}
 
-# Reproject the crs from longlat to UTM 11N
+# Reproject the tower footprint crs from longlat to UTM 11N to match CHM footprint
 # Define UTM 11N WGS84 proj4string
 utm11nCRS <- "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
 ECtower_SJER_utm <- st_transform(ECtower_SJER, utm11nCRS)
 
-# Find limits of tower footprint to only download AOP that is co-located with the footprint
+# Find limits of tower footprint to only download AOP tiles that are co-located with the tower footprint
 SJER_bbox <- st_bbox(ECtower_SJER_utm)
 SJER_bbox
 
-# Round easting/northing to nearest 1km for matching AOP tiles that overlap footprint
+# Round easting/northing to nearest 1km for matching AOP tiles that overlap tower footprint
 SJER_easting <- c(256000, 256000, 256000, 257000, 257000, 257000, 258000, 258000, 258000)
 SJER_northing <- c(4109000, 4110000, 4111000, 4109000, 4110000, 4111000, 4109000, 4110000, 4111000)
 
 ```
 
-Request ecosystem structure data from NEON API:
+Request ecosystem structure data (CHM) from NEON API:
 ```{r}
 
 # Download the canopy height tiles (1km grid) that correspond to tower footprint
@@ -157,10 +158,11 @@ SJER_chm <- merge(SJER_chm_1, SJER_chm_2, SJER_chm_3, SJER_chm_4,
 crs(SJER_chm)
 
 ```
+
 ### Plot tower footprint and CHM.
 ```{r}
 
-# Make raster a data frame
+# Make CHM raster a data frame
 SJER_chm_df <- as.data.frame(SJER_chm, xy=TRUE)
 
 # Plot the tower footprint shapefile onto the CHM
@@ -191,12 +193,20 @@ SJER_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
-max(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# 3306963
-min(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# -36934.04
-mean(flux$SJER$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# 389.3742
+SJER_CO2 <- as.data.frame(flux$SJER$data.fluxCo2.nsae.flux, as.is = TRUE)
+SJER_CO2 <- type.convert(SJER_CO2)
+colnames(SJER_CO2) <- "Co2_flux"
+view(SJER_CO2)
+
+SJER_CO2 <- dplyr::filter(SJER_CO2, Co2_flux <= 100)
+SJER_CO2 <- dplyr::filter(SJER_CO2, Co2_flux > -100)
+  
+max(SJER_CO2, na.rm=TRUE)
+# 10.91724
+min(SJER_CO2, na.rm=TRUE)
+# -96.48339
+mean(SJER_CO2, na.rm=TRUE)
+# argument is not numeric or logical: returning NA[1] NA   ???
 
 ```
 
@@ -226,7 +236,7 @@ plot(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB,
      pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
-    ylim=c(-2000,2000), xaxt="n")+
+    ylim=c(-20,20), xaxt="n")+
   axis.POSIXct(1, x=SOAPtimeB, format="%Y-%m-%d")
 
 ```
@@ -286,7 +296,7 @@ SOAP_chm_3 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLid
 SOAP_chm_4 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_298000_4101000_CHM.tif")
 SOAP_chm_5 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_299000_4100000_CHM.tif")
 SOAP_chm_6 <- raster("DP3.30015.001/2019/FullSite/D17/2019_SOAP_4/L3/DiscreteLidar/CanopyHeightModelGtif/NEON_D17_SOAP_DP3_299000_4101000_CHM.tif")
-
+   
 SOAP_chm <- merge(SOAP_chm_1, SOAP_chm_2, SOAP_chm_3, SOAP_chm_4, SOAP_chm_5, SOAP_chm_6)
 
 # Check CHM crs
@@ -323,15 +333,22 @@ SOAP_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
-max(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# 256.364
-min(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# -549.747
-mean(flux$SOAP$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# -0.6100276
+SOAP_CO2 <- as.data.frame(flux$SOAP$data.fluxCo2.nsae.flux, as.is = TRUE)
+SOAP_CO2 <- type.convert(SOAP_CO2)
+colnames(SOAP_CO2) <- "Co2_flux"
+view(SOAP_CO2)
+
+SOAP_CO2 <- filter(SOAP_CO2, Co2_flux <= 100)
+SOAP_CO2 <- filter(SOAP_CO2, Co2_flux > -100)
+  
+max(SOAP_CO2, na.rm=TRUE)
+# 89.03265
+min(SOAP_CO2, na.rm=TRUE)
+# -62.20244
+mean(SOAP_CO2, na.rm=TRUE)
+# argument is not numeric or logical: returning NA[1] NA   ???
 
 ```
-
 
 
 
@@ -359,12 +376,13 @@ plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB,
      pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
-    ylim=c(-2000,2000), xaxt="n") +
+    ylim=c(-20,20), xaxt="n") +
   axis.POSIXct(1, x=TEAKtimeB, format="%Y-%m-%d")
 
 ```
 
 ```{r, CO2 flux 1 day}
+
 # Plotted over 1 day
 ## Changed to 12-02 to 12-04 because no data 12-01
 plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
@@ -374,6 +392,7 @@ plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB,
     ylim=c(-20,20), xaxt="n") +
   abline(lm(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB), col = "blue") +
   axis.POSIXct(1, x=TEAKtimeB, format="%Y-%m-%d %H:%M:%S")
+
 ```
 
 ### Overlay shapefile of eddy covariance tower footprint on NEON CHM data.
@@ -462,11 +481,19 @@ TEAK_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
-max(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# 1412.851
-min(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# -1028.751
-mean(flux$TEAK$data.fluxCo2.nsae.flux, na.rm=TRUE)
-# -0.5793503
+TEAK_CO2 <- as.data.frame(flux$TEAK$data.fluxCo2.nsae.flux, as.is = TRUE)
+TEAK_CO2 <- type.convert(TEAK_CO2)
+colnames(TEAK_CO2) <- "Co2_flux"
+view(TEAK_CO2)
+
+TEAK_CO2 <- filter(TEAK_CO2, Co2_flux < "100")
+TEAK_CO2 <- filter(TEAK_CO2, Co2_flux > -100)
+  
+max(TEAK_CO2, na.rm=TRUE)
+# 10.96734
+min(TEAK_CO2, na.rm=TRUE)
+# -62.20244
+mean(TEAK_CO2, na.rm=TRUE)
+# argument is not numeric or logical: returning NA[1] NA   ???
 
 ```
