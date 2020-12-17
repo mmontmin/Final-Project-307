@@ -1,7 +1,7 @@
 ---
-title: "SJER, SOAP, & TEAK CO2 flux and CHM"
+title: "An analysis of CO2 exchange rates compared with tree canopy height using CHM and eddy covariance data across three NEON study sites."
 author: "McKenna Montminy"
-date: "12/10/2020"
+date: "12/17/2020"
 output: html_document
 editor_options: 
   chunk_output_type: inline
@@ -36,7 +36,7 @@ Input eddy covariance data for ALL SITES [https://www.neonscience.org/resources/
 # Setup
 options(stringsAsFactors=F)
 
-# Download data
+# Download eddy covariance flux data
 zipsByProduct(dpID="DP4.00200.001", package="basic", 
             site="SJER", 
             startdate="2019-10", enddate="2020-10")
@@ -48,9 +48,7 @@ zipsByProduct(dpID="DP4.00200.001", package="basic",
             startdate="2019-10", enddate="2020-10")
 
 flux <- stackEddy(filepath="filesToStack00200",
-                 level="dp04") 
-#extracting level 4 gives us flux data
-names(flux)
+                 level="dp04") #extracting level 4 gives us flux data
 
 ```
 
@@ -58,16 +56,15 @@ names(flux)
 ## SJER
 ```{r}
 
+# Eddy covariance data setup
 SJER_term <- unlist(strsplit(names(flux$SJER), split=".", fixed=T))
 flux$objDesc[which(flux$objDesc$Object %in% SJER_term),]
-head(SJER_term)
-flux$variables
 
 ```
 
-```{r, CO2 flux over (time period? months?)}
+```{r, CO2 flux over a year}
 
-## Eddy [contd.]: Entering time data
+## Eddy covariance: Entering annual time data
 SJERtimeB <- as.POSIXct(flux$SJER$timeBgn, 
                     format="%Y-%m-%dT%H:%M:%S", 
                     tz="GMT")
@@ -84,9 +81,9 @@ plot(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB,
 ```
 
 
-```{r, CO2 flux 1 day}
+```{r, CO2 flux over 1 day}
 
-# Plotted over 1 day
+# Plotted over 1 day ***I chose APRIL 2020 because April is part of wet season with a lot of growth. 
 plot(flux$SJER$data.fluxCo2.nsae.flux ~SJERtimeB, 
      pch=20, xlab="Date (04/01/20 - 04/03/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
@@ -98,7 +95,7 @@ plot(flux$SJER$data.fluxCo2.nsae.flux ~SJERtimeB,
 ```
 
 ### Overlay shapefile of eddy covariance tower footprint on NEON CHM data.
-Read shapefile with the boundaries of a eddy covariance tower footprint
+Read shapefile with the boundaries of a eddy covariance tower footprint.
 ```{r}
 
 NEON_ECtower_fp <-sf::st_read("data/90percentfootprint/90percent_footprint.shp")
@@ -193,20 +190,20 @@ SJER_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
+# Formatting flux list into a data frame to run stats on
 SJER_CO2 <- as.data.frame(flux$SJER$data.fluxCo2.nsae.flux, as.is = TRUE)
 SJER_CO2 <- type.convert(SJER_CO2)
 colnames(SJER_CO2) <- "Co2_flux"
 view(SJER_CO2)
 
+# Filtering CO2 flux data to be within -100 to 100 (what is biologically possible)
 SJER_CO2 <- dplyr::filter(SJER_CO2, Co2_flux <= 100)
 SJER_CO2 <- dplyr::filter(SJER_CO2, Co2_flux > -100)
   
 max(SJER_CO2, na.rm=TRUE)
-# 10.91724
+# 95.10077
 min(SJER_CO2, na.rm=TRUE)
 # -96.48339
-mean(SJER_CO2, na.rm=TRUE)
-# argument is not numeric or logical: returning NA[1] NA   ???
 
 ```
 
@@ -217,15 +214,15 @@ mean(SJER_CO2, na.rm=TRUE)
 Input eddy covariance data [https://www.neonscience.org/resources/learning-hub/tutorials/eddy-data-intro]
 ```{r}
 
+# Eddy covariance data setup
 SOAP_term <- unlist(strsplit(names(flux$SOAP), split=".", fixed=T))
 flux$objDesc[which(flux$objDesc$Object %in% SOAP_term),]
-head(SOAP_term)
-flux$variables
 
 ```
 
 ```{r, CO2 flux over (year)}
 
+## Eddy covariance: Entering annual time data
 SOAPtimeB <- as.POSIXct(flux$SOAP$timeBgn, 
                     format="%Y-%m-%dT%H:%M:%S", 
                     tz="GMT")
@@ -243,7 +240,7 @@ plot(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB,
 
 ```{r, CO2 flux 1 day}
 
-# Plotted over 1 day ***Changed to APRIL 2020 because little data in Dec. 2019 & no data in Nov. 2019, and April is part of wet season with a lot of growth. 
+# Plotted over 1 day ***I chose APRIL 2020 because April is part of wet season with a lot of growth. 
 plot(flux$SOAP$data.fluxCo2.nsae.flux ~SOAPtimeB, 
      pch=20, xlab="Date (04/01/20 - 04/03/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
@@ -333,20 +330,20 @@ SOAP_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
+#Formatting flux list into a data frame to run stats on
 SOAP_CO2 <- as.data.frame(flux$SOAP$data.fluxCo2.nsae.flux, as.is = TRUE)
 SOAP_CO2 <- type.convert(SOAP_CO2)
 colnames(SOAP_CO2) <- "Co2_flux"
 view(SOAP_CO2)
 
+# Filtering CO2 flux data to be within -100 to 100 (what is biologically possible)
 SOAP_CO2 <- filter(SOAP_CO2, Co2_flux <= 100)
 SOAP_CO2 <- filter(SOAP_CO2, Co2_flux > -100)
   
 max(SOAP_CO2, na.rm=TRUE)
 # 89.03265
 min(SOAP_CO2, na.rm=TRUE)
-# -62.20244
-mean(SOAP_CO2, na.rm=TRUE)
-# argument is not numeric or logical: returning NA[1] NA   ???
+# -96.4564
 
 ```
 
@@ -357,15 +354,15 @@ mean(SOAP_CO2, na.rm=TRUE)
 ### Input eddy covariance data [https://www.neonscience.org/resources/learning-hub/tutorials/eddy-data-intro]
 ```{r}
 
+# Eddy covariance data setup
 TEAK_term <- unlist(strsplit(names(flux$TEAK), split=".", fixed=T))
 flux$objDesc[which(flux$objDesc$Object %in% TEAK_term),]
-head(TEAK_term)
-flux$variables
 
 ```
 
 ```{r, CO2 flux over (time period? months?)}
 
+## Eddy covariance: Entering annual time data
 TEAKtimeB <- as.POSIXct(flux$TEAK$timeBgn, 
                     format="%Y-%m-%dT%H:%M:%S", 
                     tz="GMT")
@@ -383,7 +380,7 @@ plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB,
 
 ```{r, CO2 flux 1 day}
 
-# Plotted over 1 day
+# Plotted over 1 day ***I chose APRIL 2020 because April is part of wet season with a lot of growth. 
 plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
      pch=20, xlab="Date (04/01/2020 - 04/03/2020)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
@@ -480,11 +477,13 @@ TEAK_fpCHM_sd
 
 ```{r, summary eddy covariance}
 
+# Formatting flux list into a data frame to run stats on
 TEAK_CO2 <- as.data.frame(flux$TEAK$data.fluxCo2.nsae.flux, as.is = TRUE)
 TEAK_CO2 <- type.convert(TEAK_CO2)
 colnames(TEAK_CO2) <- "Co2_flux"
 view(TEAK_CO2)
 
+# Filtering CO2 flux data to be within -100 to 100 (what is biologically possible)
 TEAK_CO2 <- filter(TEAK_CO2, Co2_flux < "100")
 TEAK_CO2 <- filter(TEAK_CO2, Co2_flux > -100)
   
@@ -492,7 +491,5 @@ max(TEAK_CO2, na.rm=TRUE)
 # 10.96734
 min(TEAK_CO2, na.rm=TRUE)
 # -62.20244
-mean(TEAK_CO2, na.rm=TRUE)
-# argument is not numeric or logical: returning NA[1] NA   ???
 
 ```
