@@ -75,7 +75,7 @@ flux$SJER <- cbind(SJERtimeB, flux$SJER)
 
 # Plotted over year: Oct 2019 -- Oct 2020
 plot(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB, 
-     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     pch=".", xlab="Date (10/01/19 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
     ylim=c(-20,20), xaxt="n") +
@@ -88,11 +88,11 @@ plot(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB,
 
 # Plotted over 1 day
 plot(flux$SJER$data.fluxCo2.nsae.flux ~SJERtimeB, 
-     pch=20, xlab="Date (01/01/20 - 01/03/20)", ylab="CO2 flux",
-     xlim=c(as.POSIXct("2020-01-01", tz="GMT"),
-            as.POSIXct("2020-01-03", tz="GMT")),
+     pch=20, xlab="Date (04/01/20 - 04/03/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
+            as.POSIXct("2020-04-03", tz="GMT")),
     ylim=c(-20,20), xaxt="n") +
-  abline(lm(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB), col = "blue") +
+  #abline(lm(flux$SJER$data.fluxCo2.nsae.flux ~ SJERtimeB), col = "blue") +
   axis.POSIXct(1, x=SJERtimeB, format="%Y-%m-%d %H:%M:%S")
 
 ```
@@ -233,7 +233,7 @@ flux$SOAP <- cbind(SOAPtimeB, flux$SOAP)
 
 # Plotted over year: Oct 2019 -- Oct 2020
 plot(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB, 
-     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     pch=".", xlab="Date (10/01/19 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
     ylim=c(-20,20), xaxt="n")+
@@ -243,13 +243,13 @@ plot(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB,
 
 ```{r, CO2 flux 1 day}
 
-# Plotted over 1 day ***Changed to Jan 2020 because little data in Dec. 2019 & no data in Nov. 2019
+# Plotted over 1 day ***Changed to APRIL 2020 because little data in Dec. 2019 & no data in Nov. 2019, and April is part of wet season with a lot of growth. 
 plot(flux$SOAP$data.fluxCo2.nsae.flux ~SOAPtimeB, 
-     pch=20, xlab="Date", ylab="CO2 flux",
-     xlim=c(as.POSIXct("2020-01-01", tz="GMT"),
-            as.POSIXct("2020-01-03", tz="GMT")),
+     pch=20, xlab="Date (04/01/20 - 04/03/20)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
+            as.POSIXct("2020-03-03", tz="GMT")),
     ylim=c(-20,20), xaxt="n") +
-  abline(lm(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB), col = "blue") +
+  #abline(lm(flux$SOAP$data.fluxCo2.nsae.flux ~ SOAPtimeB), col = "blue") +
   axis.POSIXct(1, x=SOAPtimeB, format="%Y-%m-%d %H:%M:%S")
 
 ```
@@ -373,7 +373,7 @@ flux$TEAK <- cbind(TEAKtimeB, flux$TEAK)
 
 # Plotted over year: Oct 2019 -- Oct 2020
 plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
-     pch=".", xlab="Date (10/01/20 - 09/30/20)", ylab="CO2 flux",
+     pch=".", xlab="Date (10/01/19 - 09/30/20)", ylab="CO2 flux",
      xlim=c(as.POSIXct("2019-10-01", tz="GMT"),
             as.POSIXct("2020-09-30", tz="GMT")),
     ylim=c(-20,20), xaxt="n") +
@@ -384,13 +384,12 @@ plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB,
 ```{r, CO2 flux 1 day}
 
 # Plotted over 1 day
-## Changed to 12-02 to 12-04 because no data 12-01
 plot(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB, 
-     pch=20, xlab="Date", ylab="CO2 flux",
-     xlim=c(as.POSIXct("2019-12-02", tz="GMT"),
-            as.POSIXct("2019-12-04", tz="GMT")),
+     pch=20, xlab="Date (04/01/2020 - 04/03/2020)", ylab="CO2 flux",
+     xlim=c(as.POSIXct("2020-04-01", tz="GMT"),
+            as.POSIXct("2020-04-03", tz="GMT")),
     ylim=c(-20,20), xaxt="n") +
-  abline(lm(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB), col = "blue") +
+  #abline(lm(flux$TEAK$data.fluxCo2.nsae.flux ~ TEAKtimeB), col = "blue") +
   axis.POSIXct(1, x=TEAKtimeB, format="%Y-%m-%d %H:%M:%S")
 
 ```
